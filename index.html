@@ -364,6 +364,13 @@
   .result .breakdown div{font-size:10px;color:#8e99ad;line-height:1.4}
   .result .breakdown b{display:block;color:#e9eef8;font-size:13px;font-weight:800;font-variant-numeric:tabular-nums}
   .result .note{font-size:11px;color:#8c97ab;margin:8px 0 0;line-height:1.5}
+  .spirit-reward{display:flex;align-items:center;gap:9px;text-align:left;background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.1);border-radius:11px;padding:9px 10px;margin:8px 0 2px}
+  .spirit-orb-sm{width:26px;height:26px;border-radius:50%;background:var(--c,#f6c453);box-shadow:0 0 16px var(--c,#f6c453);flex:0 0 auto}
+  .spirit-reward div{flex:1;min-width:0}
+  .spirit-reward b{display:block;font-size:11px;color:#fff;line-height:1.35}
+  .spirit-reward small{display:block;font-size:9px;color:#8c97ab;line-height:1.35;margin-top:1px}
+  .spirit-reward a{font-size:10px;color:#f6c453;white-space:nowrap}
+  .spirit-garden-link{display:inline-block;margin-top:8px;font-size:10px;color:#f6c453}
   .result .share-wrap{display:none;margin-top:10px}
   .result .share-wrap.on{display:block}
   .result img{width:100%;border-radius:12px;border:1px solid var(--line);display:block}
@@ -487,6 +494,18 @@
   @media (prefers-reduced-motion:reduce){
     *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
   }
+
+
+  /* Animated cycle guide */
+  .cycle .ci{animation:cyclePulse 4.2s ease-in-out infinite}
+  .cycle .ci:nth-child(1){animation-delay:0s}
+  .cycle .ci:nth-child(3){animation-delay:.55s}
+  .cycle .ci:nth-child(5){animation-delay:1.1s}
+  .cycle .ci:nth-child(7){animation-delay:1.65s}
+  .cycle .ci:nth-child(9){animation-delay:2.2s}
+  .cycle .ar{animation:arrowPulse 1.4s ease-in-out infinite}
+  @keyframes cyclePulse{0%,72%,100%{transform:translateY(0);filter:none}8%{transform:translateY(-3px);filter:drop-shadow(0 0 8px rgba(246,196,83,.55))}}
+  @keyframes arrowPulse{0%,100%{opacity:.45}50%{opacity:1}}
 </style>
 </head>
 <body>
@@ -519,6 +538,9 @@
       </button>
       <button class="icon-btn" id="muteBtn" aria-label="Sound on" title="Sound">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.4L12 18V6L7.4 9.5z"/><path d="M15.5 9a4 4 0 0 1 0 6"/><path d="M18 6.6a7.4 7.4 0 0 1 0 10.8"/></svg>
+      </button>
+      <button class="icon-btn" id="fsBtn" aria-label="Fullscreen" title="Fullscreen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg>
       </button>
     </nav>
   </header>
@@ -2919,10 +2941,28 @@ var qrcode = function() {
   };
   var DAILY_ORDER = ['casual', 'standard', 'expert'];
 
+  /* Spirit collection: five base spirits + six special spirits.
+     Each campaign level awakens one; repeats give essence and unlock skins by stars. */
+  var SPIRITS = {
+    wood: { name: 'Wood Spirit', title: 'The Verdant', color: '#72d572', special: false, skins: ['Sprout', 'Bloom', 'Ancient'] },
+    fire: { name: 'Fire Spirit', title: 'The Ember', color: '#ff7657', special: false, skins: ['Flame', 'Solar', 'Inferno'] },
+    earth: { name: 'Earth Spirit', title: 'The Foundation', color: '#d9a45b', special: false, skins: ['Clay', 'Crystal', 'Mountain'] },
+    metal: { name: 'Metal Spirit', title: 'The Blade', color: '#d7e2ee', special: false, skins: ['Silver', 'Chrome', 'Aurora'] },
+    water: { name: 'Water Spirit', title: 'The Current', color: '#59a9ff', special: false, skins: ['Droplet', 'Tide', 'Abyss'] },
+    wind: { name: 'Wind Spirit', title: 'The Breeze', color: '#7ee7c7', special: true, skins: ['Breeze', 'Gale', 'Tempest'] },
+    thunder: { name: 'Thunder Spirit', title: 'The Storm', color: '#ffd45c', special: true, skins: ['Spark', 'Storm', 'Thunderhead'] },
+    ice: { name: 'Ice Spirit', title: 'The Glacier', color: '#8fdcff', special: true, skins: ['Frost', 'Glacier', 'Absolute'] },
+    light: { name: 'Light Spirit', title: 'The Dawn', color: '#fff1b8', special: true, skins: ['Dawn', 'Prism', 'Radiant'] },
+    dark: { name: 'Dark Spirit', title: 'The Eclipse', color: '#b79cff', special: true, skins: ['Shade', 'Eclipse', 'Umbral'] },
+    void: { name: 'Void Spirit', title: 'The Singularity', color: '#8a6bff', special: true, skins: ['Hollow', 'Singularity', 'Cosmic'] }
+  };
+  var SPIRIT_ORDER = ['wood', 'fire', 'earth', 'metal', 'water', 'wind', 'thunder', 'ice', 'light', 'dark', 'void'];
+
   var SAVE_KEY = 'em.save.v2';
   var SET_KEY = 'em.settings.v2';
   var DAILY_KEY = 'em.daily.v3';
   var WEEK_KEY = 'em.weekly.v3';
+  var SPIRIT_KEY = 'em.spirits.v1';
 
   var boardEl = document.getElementById('board');
   var statusEl = document.getElementById('status');
@@ -2943,6 +2983,7 @@ var qrcode = function() {
   var undoBtn = document.getElementById('undoBtn');
   var restartBtn = document.getElementById('restartBtn');
   var muteBtn = document.getElementById('muteBtn');
+  var fsBtn = document.getElementById('fsBtn');
   var dailyBtn = document.getElementById('dailyBtn');
   var dailyDot = document.getElementById('dailyDot');
   var levelsBtn = document.getElementById('levelsBtn');
@@ -2954,6 +2995,10 @@ var qrcode = function() {
   var appEl = document.getElementById('app');
 
   var save = loadJSON(SAVE_KEY, { unlocked: 1, stars: {}, best: {}, seenHelp: false, seenUnlocks: [], seenPowers: [] });
+  var spiritSave = loadJSON(SPIRIT_KEY, { unlocked: {}, essence: 0, selected: {} });
+  if (!spiritSave.unlocked || typeof spiritSave.unlocked !== 'object') spiritSave.unlocked = {};
+  if (!spiritSave.selected || typeof spiritSave.selected !== 'object') spiritSave.selected = {};
+  spiritSave.essence = parseInt(spiritSave.essence, 10) || 0;
   save.stars = save.stars && typeof save.stars === 'object' ? save.stars : {};
   save.best = save.best && typeof save.best === 'object' ? save.best : {};
   save.seenUnlocks = Array.isArray(save.seenUnlocks) ? save.seenUnlocks : [];
@@ -3723,6 +3768,7 @@ var qrcode = function() {
     S.timeBonus = 0;
     S.stars = 0;
     S.daily = null;
+    S.spiritReward = null;
     if (S.msgTimer) { clearTimeout(S.msgTimer); S.msgTimer = null; }
     S.seed = (opts.seed !== undefined) ? (opts.seed >>> 0) : randSeed();
     seedRng(S.seed ^ Math.imul(idx + 1, 0x9e3779b1));
@@ -3779,6 +3825,7 @@ var qrcode = function() {
     S.timeBonus = 0;
     S.stars = 0;
     S.daily = null;
+    S.spiritReward = null;
     if (S.msgTimer) { clearTimeout(S.msgTimer); S.msgTimer = null; }
     S.seed = (opts.seed !== undefined) ? (opts.seed >>> 0) : hashStr('element-merge-daily-' + S.dailyDate + '-' + diff);
     seedRng(S.seed);
@@ -4042,6 +4089,49 @@ var qrcode = function() {
     if (ratio >= 0.12) return 2;
     return 1;
   }
+  function spiritForLevel(idx) {
+    return SPIRIT_ORDER[idx % SPIRIT_ORDER.length];
+  }
+  function awardSpirit(idx, stars) {
+    var key = spiritForLevel(idx);
+    var rec = spiritSave.unlocked[key];
+    var isNew = !rec;
+    if (isNew) rec = { count: 0, skins: [] };
+    rec.count = (parseInt(rec.count, 10) || 0) + 1;
+    if (!Array.isArray(rec.skins)) rec.skins = [];
+    var newSkins = [];
+    var maxSkin = Math.max(0, Math.min(2, (parseInt(stars, 10) || 1) - 1));
+    for (var i = 0; i <= maxSkin; i++) {
+      if (rec.skins.indexOf(i) < 0) { rec.skins.push(i); newSkins.push(i); }
+    }
+    if (!rec.skins.length) rec.skins.push(0);
+    spiritSave.unlocked[key] = rec;
+    spiritSave.essence += isNew ? 0 : 5;
+    saveJSON(SPIRIT_KEY, spiritSave);
+    S.spiritReward = {
+      key: key,
+      newUnlock: isNew,
+      count: rec.count,
+      skins: rec.skins.slice(),
+      newSkins: newSkins,
+      essence: isNew ? 0 : 5
+    };
+  }
+  function spiritRewardHtml() {
+    var r = S.spiritReward;
+    if (!r || !SPIRITS[r.key]) return '';
+    var sp = SPIRITS[r.key];
+    var label = r.newUnlock ? 'New Spirit' : 'Spirit +1';
+    var skin = sp.skins[r.skins.length - 1] || sp.skins[0];
+    var extra = r.newUnlock
+      ? 'Awakened · ' + skin
+      : '+5 essence · ' + (r.newSkins.length ? 'New skin: ' + sp.skins[r.newSkins[r.newSkins.length - 1]] : skin);
+    return '<div class="spirit-reward">' +
+      '<span class="spirit-orb-sm" style="--c:' + sp.color + '"></span>' +
+      '<div><b>' + label + ' · ' + sp.name + '</b><small>' + extra + '</small></div>' +
+      '<a href="/spirit-garden/" target="_top">Spirit Garden →</a></div>';
+  }
+
   function winLevel() {
     if (S.finished) return;
     S.finished = true;
@@ -4058,6 +4148,7 @@ var qrcode = function() {
     S.score += moveBonus + timeBonus;
     S.stars = stars;
     if (S.sim) return;
+    awardSpirit(S.levelIdx, stars);
     if (!S.noSave) {
       var num = S.levelIdx + 1;
       S.newBest = S.score > (save.best[num] || 0);
@@ -4102,7 +4193,9 @@ var qrcode = function() {
     saveJSON(DAILY_KEY, dailyData);
     var w = recordWeekly(diff, S.score);
     var rank = weeklyRankFor(diff);
-    S.daily = { streak: dailyData.streak, best: dailyData.best[diff], diff: diff, rank: rank, weeklyBest: w.best[diff] || 0 };
+    S.daily = { streak: dailyData.streak, best: dailyData.best[diff], diff: diff, rank: rank, weeklyBest: w.best[diff] || 0, essence: 2 };
+    spiritSave.essence += 2;
+    saveJSON(SPIRIT_KEY, spiritSave);
     stopBgm();
     playWin();
     haptic([18, 40, 26]);
@@ -4842,6 +4935,7 @@ var qrcode = function() {
         '<div class="score"><small>SCORE</small>' + formatNum(S.score) + '</div>' +
         '<div class="breakdown"><div><b>+' + formatNum(S.moveBonus) + '</b>moves bonus</div><div><b>+' + formatNum(S.timeBonus) + '</b>time bonus</div><div><b>' + (S.maxMergeLevel >= 6 ? 'Spirit' : 'Lv' + S.maxMergeLevel) + '</b>best merge</div></div>' +
         '<p class="note">' + (last ? 'You forged every Spirit in the lab. The five elements are yours.' : (unlockedNow ? 'Level ' + nextNum + ' unlocked. ' : '') + 'Moves left: ' + S.steps + ' · Time ' + fmtTime(S.timer.elapsed)) + (S.newBest ? ' · New best!' : '') + '</p>' +
+        spiritRewardHtml() +
         '<div class="btn-row"><button class="btn" id="rMain" data-focus>' + (last ? 'Play again' : 'Next level') + '</button><button class="btn ghost" id="rLevels">Levels</button></div>' +
         '<button class="btn ghost small" id="rShare" style="margin-top:8px">Share result</button>' +
         '<div class="share-wrap" id="shareWrap"></div>' +
@@ -4867,9 +4961,10 @@ var qrcode = function() {
         '<h2 id="modalTitle">Daily Complete</h2>' +
         '<div class="stars" style="font-size:22px;letter-spacing:.08em;color:var(--amber);text-shadow:none">' + (S.daily ? S.daily.streak : effectiveStreak()) + ' DAY STREAK</div>' +
         '<div class="score"><small>SCORE</small>' + formatNum(S.score) + '</div>' +
-        '<div class="breakdown"><div><b>' + (rank ? '#' + rank : '—') + '</b>weekly rank</div><div><b>' + formatNum(best) + '</b>personal best</div><div><b>' + S.spirits + '</b>spirits</div></div>' +
-        '<p class="note">' + (newBest ? 'New personal best!' : 'Best ' + formatNum(best) + '.') + ' Weekly board updated. Come back tomorrow to keep the streak alive.</p>' +
+        '<div class="breakdown"><div><b>' + (rank ? '#' + rank : '—') + '</b>weekly rank</div><div><b>' + formatNum(best) + '</b>personal best</div><div><b>+2</b>spirit essence</div></div>' +
+        '<p class="note">' + (newBest ? 'New personal best!' : 'Best ' + formatNum(best) + '.') + ' Weekly board updated. +2 spirit essence for the Spirit Garden. Come back tomorrow to keep the streak alive.</p>' +
         '<div class="btn-row"><button class="btn" id="rDailyAgain" data-focus>Play again</button><button class="btn ghost" id="rDailyHub">Daily hub</button></div>' +
+        '<a class="spirit-garden-link" href="/spirit-garden/" target="_top">Open Spirit Garden →</a>' +
         '<button class="btn ghost small" id="rShare" style="margin-top:8px">Share result</button>' +
         '<div class="share-wrap" id="shareWrap"></div>' +
         '</div>';
@@ -5161,6 +5256,34 @@ var qrcode = function() {
     else { ensureAudio(); startBgm(); }
   }
   muteBtn.addEventListener('click', function () { setMuted(!muted); playUi(); });
+
+  function fullscreenElement() {
+    return document.fullscreenElement || document.webkitFullscreenElement || null;
+  }
+  function toggleFullscreen() {
+    var el = document.documentElement;
+    var req = el.requestFullscreen || el.webkitRequestFullscreen;
+    var exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (!fullscreenElement() && req) {
+      try {
+        var p = req.call(el, { navigationUI: 'hide' });
+        if (p && p.catch) p.catch(function () { toast('Fullscreen was blocked by the browser.', 2600); });
+      } catch (e) { toast('Fullscreen is not available in this browser.', 2600); }
+    } else if (fullscreenElement() && exit) {
+      try { exit.call(document); } catch (e) {}
+    } else {
+      toast('Use your browser menu for fullscreen, or open the game in a new tab.', 3000);
+    }
+  }
+  fsBtn.addEventListener('click', function () { toggleFullscreen(); playUi(); });
+  document.addEventListener('fullscreenchange', function () {
+    fsBtn.setAttribute('aria-label', fullscreenElement() ? 'Exit fullscreen' : 'Fullscreen');
+    fsBtn.title = fullscreenElement() ? 'Exit fullscreen' : 'Fullscreen';
+  });
+  document.addEventListener('webkitfullscreenchange', function () {
+    fsBtn.setAttribute('aria-label', fullscreenElement() ? 'Exit fullscreen' : 'Fullscreen');
+    fsBtn.title = fullscreenElement() ? 'Exit fullscreen' : 'Fullscreen';
+  });
 
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
