@@ -3136,6 +3136,120 @@ var qrcode = function() {
   }
 
   /* ------------------------------------------------------------------ */
+  /* Online weekly board (Supabase, anon key + RLS)                      */
+  /* ------------------------------------------------------------------ */
+  var SUPABASE_URL = 'https://yupisxqrxnzsklqtqyii.supabase.co';
+  var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl1cGlzeHFyeG56c2tscXRxeWlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU1MjQ5ODMsImV4cCI6MjExMTEwMDk4M30.r5yJ8RwYdpTUhj6xSXHFt4eTHgbR9QLfcEeqZXJTcJ4';
+  var PLAYER_ID = (function () {
+    try {
+      var v = localStorage.getItem('em.playerId.v1');
+      if (v) return v;
+      var id = (window.crypto && window.crypto.randomUUID) ? window.crypto.randomUUID() : ('dev-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10));
+      localStorage.setItem('em.playerId.v1', id);
+      return id;
+    } catch (e) { return 'dev-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); }
+  })();
+  var PLAYER_NAME = (function () {
+    try {
+      var v = localStorage.getItem('em.playerName.v1');
+      if (v) return v;
+      var n = 'Player-' + PLAYER_ID.slice(0, 4);
+      localStorage.setItem('em.playerName.v1', n);
+      return n;
+    } catch (e) { return 'Player'; }
+  })();
+  var onlineCache = { casual: null, standard: null, expert: null };
+
+  function onlineEnabled() {
+    return !!(SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.indexOf('__SUPABASE') !== 0);
+  }
+  function weekStartUTC() {
+    var d = new Date();
+    var day = (d.getUTCDay() + 6) % 7;
+    var m = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - day));
+    return m.toISOString().slice(0, 10);
+  }
+  function escHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function supabaseHeaders() {
+    return {
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+      'Content-Type': 'application/json'
+    };
+  }
+  function fetchJSON(url, opts, timeout) {
+    opts = opts || {};
+    var ctrl = window.AbortController ? new AbortController() : null;
+    if (ctrl) opts.signal = ctrl.signal;
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, timeout || 7000) : null;
+    return fetch(url, opts).then(function (r) {
+      if (timer) clearTimeout(timer);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }, function (e) {
+      if (timer) clearTimeout(timer);
+      throw e;
+    });
+  }
+  async function submitOnlineScore(diff, score) {
+    if (!onlineEnabled()) return null;
+    return fetchJSON(SUPABASE_URL + '/rest/v1/rpc/submit_weekly_score', {
+      method: 'POST',
+      headers: supabaseHeaders(),
+      body: JSON.stringify({
+        p_device_id: PLAYER_ID,
+        p_name: PLAYER_NAME,
+        p_score: score,
+        p_difficulty: diff
+      })
+    }, 8000);
+  }
+  async function fetchOnlineBoard(diff) {
+    if (!onlineEnabled()) return null;
+    var q = '/rest/v1/weekly_leaderboard?select=device_id,name,score,rank' +
+      '&week_start=eq.' + encodeURIComponent(weekStartUTC()) +
+      '&difficulty=eq.' + encodeURIComponent(diff) +
+      '&order=rank.asc&limit=20';
+    var rows = await fetchJSON(SUPABASE_URL + q, { headers: { 'apikey': SUPABASE_ANON_KEY } }, 7000);
+    return (rows || []).map(function (r) {
+      return { name: r.name, score: r.score, rank: r.rank, you: r.device_id === PLAYER_ID };
+    });
+  }
+  async function fetchOnlineRank(diff) {
+    if (!onlineEnabled()) return 0;
+    var q = '/rest/v1/weekly_leaderboard?select=rank' +
+      '&week_start=eq.' + encodeURIComponent(weekStartUTC()) +
+      '&difficulty=eq.' + encodeURIComponent(diff) +
+      '&device_id=eq.' + encodeURIComponent(PLAYER_ID) + '&limit=1';
+    var rows = await fetchJSON(SUPABASE_URL + q, { headers: { 'apikey': SUPABASE_ANON_KEY } }, 7000);
+    return rows && rows[0] ? rows[0].rank : 0;
+  }
+  function onlineRowsHtml(rows) {
+    if (!rows || !rows.length) {
+      return '<div class="week-row you empty-you"><span class="rank">—</span><span class="name">No scores yet — play today</span><span class="pts"></span></div>';
+    }
+    return rows.map(function (r) {
+      return '<div class="week-row' + (r.you ? ' you' : '') + '">' +
+        '<span class="rank">#' + r.rank + '</span>' +
+        '<span class="name">' + escHtml(r.name) + (r.you ? ' <span class="you-tag">YOU</span>' : '') + '</span>' +
+        '<span class="pts">' + formatNum(r.score) + '</span></div>';
+    }).join('');
+  }
+  function refreshOnlineBoard(diff) {
+    if (!onlineEnabled() || !diff) return;
+    fetchOnlineBoard(diff).then(function (rows) {
+      onlineCache[diff] = rows;
+      if (S.dailyTab !== diff) return;
+      var wb = document.getElementById('weekBoard');
+      if (wb) wb.innerHTML = onlineRowsHtml(rows);
+    }).catch(function () { /* keep local pace-setters as fallback */ });
+  }
+
+  /* ------------------------------------------------------------------ */
   /* Audio                                                               */
   /* ------------------------------------------------------------------ */
   var actx = null, master = null, bgmTimer = null, bgmStep = 0, bgmGen = 0;
@@ -3966,7 +4080,7 @@ var qrcode = function() {
     playLose();
     showResult('lose');
   }
-  function finishDaily() {
+  async function finishDaily() {
     if (S.finished) return;
     S.finished = true;
     S.won = true;
@@ -3991,6 +4105,14 @@ var qrcode = function() {
     stopBgm();
     playWin();
     haptic([18, 40, 26]);
+    if (onlineEnabled()) {
+      try {
+        await submitOnlineScore(diff, S.score);
+        var onlineRank = await fetchOnlineRank(diff);
+        if (onlineRank > 0) S.daily.rank = onlineRank;
+        onlineCache[diff] = null;
+      } catch (e) { /* local pace-setters remain the fallback */ }
+    }
     showResult('daily');
     updateDailyDot();
   }
@@ -4573,7 +4695,7 @@ var qrcode = function() {
       '<div>' + ICON_SVG.spirit + '<span><b>Spirit</b>the Lv6 goal</span></div>' +
       '<div>' + ICON_SVG.void + '<span><b>Void</b>the Crucible; a Spirit clears it</span></div></div>' +
       '<h3>Late-game laws</h3><p>The last five levels add one law each: <b>Fire Day</b> (Fire/Wood drop more often), <b>Long Night</b> (Dark clears keep your streak), <b>Flood</b> (Water Lv2 rises), <b>Pure Five</b> (no specials) and <b>The Crucible</b> (the Void spreads; forge a Spirit). The HUD and opening toast explain the current law.</p>' +
-      '<h3>Daily challenge</h3><p>Three seeded runs every day: <b>Casual 60</b>, <b>Standard 45</b>, <b>Expert 35</b> moves. Each difficulty has its own board and weekly board. Finish any difficulty to extend your streak; your weekly best is ranked against Lab Bots on this device.</p>' +
+      '<h3>Daily challenge</h3><p>Three seeded runs every day: <b>Casual 60</b>, <b>Standard 45</b>, <b>Expert 35</b> moves. Each difficulty has its own board and weekly board. Finish any difficulty to extend your streak; your weekly best is ranked on the live weekly board.</p>' +
       '<button class="btn sticky-cta" id="htpDone" data-focus>' + (onboarding ? 'Start Level ' + (S.mode === 'campaign' ? (S.levelIdx + 1) : 1) : 'Got it') + '</button>';
     openModal(html, {
       dismissible: !onboarding,
@@ -4652,10 +4774,11 @@ var qrcode = function() {
         return '<button class="week-tab' + (d === tab ? ' on' : '') + '" data-week-tab="' + d + '">' + DAILY_DIFFS[d].label + '</button>';
       }).join('') + '</div>' +
       '<div id="weekBoard">' + weeklyBoardHtml(tab) + '</div>' +
-      '<p class="hintline">Lab Bots are AI pace-setters on this device. The global weekly board connects when the online build is live.</p>' +
+      '<p class="hintline">' + (onlineEnabled() ? 'Live weekly board — scores are saved to the cloud. If the network is down, local AI pace-setters are shown.' : 'Lab Bots are AI pace-setters on this device. The global weekly board connects when the online build is live.') + '</p>' +
       '<button class="btn ghost" id="dailyClose">Close</button>';
     openModal(html, { dismissible: true });
     document.getElementById('dailyClose').addEventListener('click', closeModal);
+    refreshOnlineBoard(tab);
     modalBody.querySelectorAll('[data-daily-play]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var diff = btn.getAttribute('data-daily-play');
@@ -4672,6 +4795,7 @@ var qrcode = function() {
         });
         var wb = document.getElementById('weekBoard');
         if (wb) wb.innerHTML = weeklyBoardHtml(S.dailyTab);
+        refreshOnlineBoard(S.dailyTab);
         playUi();
       });
     });
@@ -5075,7 +5199,7 @@ var qrcode = function() {
           spirits: S.spirits, combo: S.combo, won: S.won, finished: S.finished,
           maxMergeLevel: S.maxMergeLevel, seed: S.seed, rngState: S.rngState,
           law: S.law, swaps: S.swaps, swapMode: S.swapMode, movesMade: S.movesMade,
-          dailyDiff: S.dailyDiff, voids: voidCount()
+          dailyDiff: S.dailyDiff, voids: voidCount(), playerId: PLAYER_ID
         };
       },
       tap: handleTap,
